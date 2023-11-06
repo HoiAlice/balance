@@ -1,5 +1,6 @@
 import numpy as np
-import jax.numpy as jnp
+import jax
+from jax import numpy as jnp
 import pandas as pd
 
 # все численные параметры жестко заданы
@@ -18,7 +19,7 @@ def read_NIOT(filepath):
     # 56 отраслей, 3 первичных ресурса, 1 агрегированный потребитель
     tables = []
     for year in range(15):
-        table = table_new_new[14]
+        table = table_new_new[year]
         I = []
         J = []
         for i in range(56):
@@ -27,10 +28,11 @@ def read_NIOT(filepath):
             if np.sum(table[:,i]) == 0:
                 J.append(i)
         table = jnp.array([[table[i, j] for j in range(57) if j not in J] for i in range(59) if i not in I]) #выкинул нулевые строки\столбцы
-        table = table
         tables.append(table)
     return tables
 
+
+@jax.jit
 def get_W(Z, rho):
     A = jnp.sum(Z, axis = 1)
     Z_ = jnp.transpose(jnp.transpose(Z) / A)
@@ -38,14 +40,29 @@ def get_W(Z, rho):
     W, W0 = W_[:,:-1], W_[:,-1]
     return W, W0
 
+
+@jax.jit
 def CES(p, W, rho):
     A = jnp.transpose(W) * p
     B = jnp.power(jnp.transpose(A), rho / (1 + rho))
     q = jnp.power(jnp.sum(B, axis = 0), (1 + rho) / rho)
     return q
 
-def JCES(p, W, rho):
+
+def get_prices(cost_f, n, s, eps=10E-16): #простая итерация со стартом в 0, сходится оч. быстро
+    m = len(s)
+    p = jnp.zeros(n+m).at[n:].set(s)
+    q = jnp.zeros(n).at[:].set(cost_f(p))
+    while jnp.linalg.norm(p[:n] - q) >= eps:
+        p = p.at[:n].set(q)
+        q = q.at[:].set(cost_f(p))
+    return p
+    
+
+@jax.jit
+def JCES(p, W, rho): #полагая, что p - равновесная цена
     n = jnp.transpose(W).shape[0]
     return  jnp.power(jnp.divide(jnp.transpose(p * jnp.transpose(jnp.power(W, rho))),p[:n]), 1/(1+rho))
     
+
     
