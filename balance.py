@@ -48,6 +48,7 @@ def CES(p, W, rho):
     return q
 
 
+
 def get_prices(cost_f, n, s, eps=10E-16): #простая итерация со стартом в 0, сходится оч. быстро
     m = len(s)
     p = jnp.zeros(n+m).at[n:].set(s)
@@ -59,15 +60,16 @@ def get_prices(cost_f, n, s, eps=10E-16): #простая итерация со 
     
 
 @jax.jit
-def JCES(p, W, rho): #выплевывает транспонированный якобиан
+def JCES(p, W, rho): #выплевывает транспонированный якобиан.
     n = jnp.transpose(W).shape[0]
     q = CES(p, W, rho)
     return  jnp.power(jnp.transpose(jnp.divide(jnp.transpose(q * jnp.power(W, rho)),p)), 1/(1+rho))
     
-
+# нужно протестировать другие версии
 def primal_J(Z, Z_hat): #абсолютная ошибка восстановления потребления. прямая версия.
     n, m = Z.shape
     n, m = m, n - m
+    
     
     solver = pywraplp.Solver.CreateSolver("GLOP")
     x = [solver.NumVar(0.0, solver.infinity(), 'x_' + str(j+1)) for j in range(n)]
