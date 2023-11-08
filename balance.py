@@ -31,17 +31,15 @@ def read_NIOT(filepath):
 
 
 @jax.jit
-def get_W(Z, rho): #вот тут однозначно косяк в реализации, но какой? 
-    n1, n2 = Z.shape
-    B = jnp.zeros((n1,))
-    B = B.at[n2:].set(jnp.sum(Z, axis = 1)[n2:])
-    B = B.at[:n2].set(jnp.sum(Z, axis = 0))
-    Z_ = jnp.transpose(jnp.transpose(Z) / B)
-    W = jnp.power(Z_, (1+rho)/rho)
+def get_W(Z, Z0, rho): #тут косяк
+    n, m = Z.shape
+    n, m = m, n - m
+    
+    W = jnp.transpose(jnp.array([[jnp.power(Z[i, j]/jnp.sum(Z[:,j]),(1+rho[j])/rho[j]) for i in range(n+m)] for j in range(n)]))
     return W
 
 @jax.jit
-def CES(p, W, rho):
+def CES(p, W, rho): #или тут косяк
     A = jnp.transpose(W) * p
     B = jnp.power(jnp.transpose(A), rho / (1 + rho))
     q = jnp.power(jnp.sum(B, axis = 0), (1 + rho) / rho)
@@ -64,65 +62,3 @@ def JCES(p, W, rho): #выплевывает транспонированный 
     n = jnp.transpose(W).shape[0]
     q = CES(p, W, rho)
     return  jnp.power(jnp.transpose(jnp.divide(jnp.transpose(q * jnp.power(W, rho)),p)), 1/(1+rho))
-    
-# нужно протестировать другие версии
-def primal_J(Z, Z_hat): #абсолютная ошибка восстановления потребления. прямая версия.
-    n, m = Z.shape
-    n, m = m, n - m
-    
-    
-    solver = pywraplp.Solver.CreateSolver("GLOP")
-    x = [solver.NumVar(0.0, solver.infinity(), 'x_' + str(j+1)) for j in range(n)]
-    u = [[solver.NumVar(0.0, solver.infinity(), 'u^'+str(i+1)+'_'+str(j+1)) for j in range(n)] for i in range(n+m)]
-    
-    for j in range(n):
-        solver.Add(float(jnp.sum(Z[:,j])) * x[j] >= sum([float(Z[j,k]) * x[k] for k in range(n)]))
-        for i in range(n+m):
-            solver.Add(u[i][j] >= float(Z_hat[i,j]) - x[j] * float(Z[i, j]))
-            solver.Add(u[i][j] >= x[j] * float(Z[i, j]) - float(Z_hat[i,j]))
-    
-    solver.Minimize(sum([sum(u[i]) for i in range(n+m)]))
-    status = solver.Solve()
-    if status != pywraplp.Solver.OPTIMAL:
-        print('not optimal')
-    J = solver.Objective().Value()
-    x = jnp.array([x[j].solution_value() for j in range(n)])
-    u = jnp.array([[u[i][j].solution_value() for j in range(n)] for i in range(n+m)])
-    return J, x, u
-
-
-def dual_J(Z, Z_hat): #абсолютная ошибка восстановления потребления. дуальная версия.
-    n, m = Z.shape
-    n, m = m, n - m
-    
-    solver = pywraplp.Solver.CreateSolver("GLOP")
-    nu = [solver.NumVar(0.0,solver.infinity(), 'nu_'+str(k+1)) for k in range(n)]
-    lam = [[solver.NumVar(-1.0, 1.0, 'lam^'+str(i+1)+'_'+str(j+1)) for j in range(n)] for i in range(n+m)]
-    
-    for k in range(n):
-        solver.Add(sum([float(Z[j,k])*nu[j] for j in range(n)]) >= sum([float(Z[i,k]) * (nu[k] + lam[i][k]) for i in range(n+m)]))
-    
-    solver.Maximize(sum([sum([float(Z_hat[i,j])*lam[i][j] for j in range(n)]) for i in range(n+m)]))
-    status = solver.Solve()
-    if status != pywraplp.Solver.OPTIMAL:
-        print('not optimal')
-    J = solver.Objective().Value()
-    nu = jnp.array([nu[k].solution_value() for k in range(n)])
-    lam = jnp.array([[lam[i][j].solution_value() for j in range(n)] for i in range(n+m)])
-    return J, nu, lam
-
-@jax.jit
-def lagrangian_J(Z, Z_hat, x, u, nu, lam): # Лагранжиан для ошибки
-    n, m = Z.shape
-    n, m = m, n - m
-    L = (jnp.trace(u @ jnp.transpose(1 - lam)) + jnp.trace(Z_hat @ jnp.transpose(lam)) +
-    jnp.dot(nu, jnp.matmul(Z[:33,:], x)) - jnp.sum(x * nu * Z) - jnp.sum(x * Z * lam)) 
-    return L
-
-def grad_J(Z, Z_hat): # градиент оптимизационной функции
-    J1, x, u = primal_J(Z, Z_hat)
-    J2, nu, lam = dual_J(Z, Z_hat)
-    grad = jax.grad(lagrangian_J)(Z, Z_hat, x, u, nu, lam)
-    print('error=', J1/jnp.sum(Z_hat))
-    return grad
-    
