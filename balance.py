@@ -65,7 +65,7 @@ def JCES(p, W, rho): #выплевывает транспонированный 
     return  jnp.power(jnp.transpose(jnp.divide(jnp.transpose(q * jnp.power(W, rho)),p)), 1/(1+rho))
     
 
-def primal_J(Z, Z_hat):
+def primal_J(Z, Z_hat): #абсолютная ошибка восстановления потребления. прямая версия.
     n, m = Z.shape
     n, m = m, n - m
     
@@ -89,7 +89,7 @@ def primal_J(Z, Z_hat):
     return J, x, u
 
 
-def dual_J(Z, Z_hat):
+def dual_J(Z, Z_hat): #абсолютная ошибка восстановления потребления. дуальная версия.
     n, m = Z.shape
     n, m = m, n - m
     
@@ -110,16 +110,17 @@ def dual_J(Z, Z_hat):
     return J, nu, lam
 
 @jax.jit
-def lagrangian_J(Z, Z_hat, x, u, nu, lam):
+def lagrangian_J(Z, Z_hat, x, u, nu, lam): # Лагранжиан для ошибки
     n, m = Z.shape
     n, m = m, n - m
     L = (jnp.trace(u @ jnp.transpose(1 - lam)) + jnp.trace(Z_hat @ jnp.transpose(lam)) +
     jnp.dot(nu, jnp.matmul(Z[:33,:], x)) - jnp.sum(x * nu * Z) - jnp.sum(x * Z * lam)) 
     return L
 
-def grad_J(Z, Z_hat):
+def grad_J(Z, Z_hat): # градиент оптимизационной функции
     J1, x, u = primal_J(Z, Z_hat)
     J2, nu, lam = dual_J(Z, Z_hat)
     grad = jax.grad(lagrangian_J)(Z, Z_hat, x, u, nu, lam)
+    print('error=', J1/jnp.sum(Z_hat))
     return grad
     
