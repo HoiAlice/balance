@@ -1,12 +1,12 @@
-import numpy as np
 import jax
 from jax import numpy as jnp
+import numpy as np
 import pandas as pd
-from ortools.linear_solver import pywraplp
+
 
 # все численные параметры жестко заданы
 def read_NIOT(filepath):
-    table_raw = pd.read_excel('NIOTS/RUS_NIOT_nov16.xlsx', index_col=0, sheet_name='National IO-tables').to_numpy()
+    table_raw = pd.read_excel(filepath, index_col=0, sheet_name='National IO-tables').to_numpy()
     table_cutted = table_raw[1:,3:-1].reshape(15, 120, 62)
     table_new = np.zeros((15,59,62))
     table_new[:,:56,:] = table_cutted[:,:56,:] #межотраслевое в пределах страны
@@ -28,37 +28,3 @@ def read_NIOT(filepath):
         table = table.at[-3:,-6:].set(jnp.zeros((3, 6)))
         tables.append(table)
     return tables
-
-
-@jax.jit
-def get_W(Z, Z0, rho): #тут косяк
-    n, m = Z.shape
-    n, m = m, n - m
-    
-    W = jnp.transpose(jnp.array([[jnp.power(Z[i, j]/jnp.sum(Z[:,j]),(1+rho[j])/rho[j]) for i in range(n+m)] for j in range(n)]))
-    return W
-
-@jax.jit
-def CES(p, W, rho): #или тут косяк
-    A = jnp.transpose(W) * p
-    B = jnp.power(jnp.transpose(A), rho / (1 + rho))
-    q = jnp.power(jnp.sum(B, axis = 0), (1 + rho) / rho)
-    return q
-
-
-
-def get_prices(cost_f, n, s, eps=10E-16): #простая итерация со стартом в 0, сходится оч. быстро
-    m = len(s)
-    p = jnp.zeros(n+m).at[n:].set(s)
-    q = jnp.zeros(n).at[:].set(cost_f(p))
-    while jnp.linalg.norm(p[:n] - q) >= eps:
-        p = p.at[:n].set(q)
-        q = q.at[:].set(cost_f(p))
-    return p
-    
-
-@jax.jit
-def JCES(p, W, rho): #выплевывает транспонированный якобиан.
-    n = jnp.transpose(W).shape[0]
-    q = CES(p, W, rho)
-    return  jnp.power(jnp.transpose(jnp.divide(jnp.transpose(q * jnp.power(W, rho)),p)), 1/(1+rho))
