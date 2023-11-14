@@ -3,7 +3,6 @@ from jax import numpy as jnp
 import numpy as np
 import pandas as pd
 
-
 # все численные параметры жестко заданы
 def read_NIOT(filepath):
     table_raw = pd.read_excel(filepath, index_col=0, sheet_name='National IO-tables').to_numpy()
@@ -28,3 +27,26 @@ def read_NIOT(filepath):
         table = table.at[-3:,-6:].set(jnp.zeros((3, 6)))
         tables.append(table)
     return tables
+
+@jax.custom_jvp
+def J_to_Z(J, Z0):
+    n, m = J.shape
+    n, m = m, n - m
+    M = jnp.diag(jnp.sum(J, axis = 0)) - J[:n,:]
+    y = jnp.matmul(jnp.linalg.inv(M),Z0)
+    Z_pred = y * J
+    return Z_pred
+
+@J_to_Z.defjvp
+def J_to_Z_jacobian(primals, tangents):
+    J, Z0 = primals
+    dJ, dZ0 = tangents
+    n, m = J.shape
+    n, m = m, n - m
+    M = jnp.diag(jnp.sum(J, axis = 0)) - J[:n,:]
+    dM = jnp.diag(jnp.sum(dJ, axis = 0)) - dJ[:n,:] 
+    y = jnp.matmul(jnp.linalg.inv(M), Z0)
+    dy = jnp.matmul(jnp.linalg.inv(M), dZ0) - jnp.matmul(jnp.linalg.inv(M), jnp.matmul(dM, y))
+    Z_pred = y * J
+    dZ_pred = dy * J + y * dJ
+    return (Z_pred, dZ_pred)
