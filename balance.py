@@ -28,7 +28,8 @@ def read_NIOT(filepath):
         tables.append(table)
     return tables
 
-@jax.custom_jvp
+#@jax.custom_jvp
+@jax.jit
 def J_to_Z(J, Z0):
     n, m = J.shape
     n, m = m, n - m
@@ -37,16 +38,16 @@ def J_to_Z(J, Z0):
     Z_pred = y * J
     return Z_pred
 
-@J_to_Z.defjvp
-def J_to_Z_jacobian(primals, tangents):
-    J, Z0 = primals
-    dJ, dZ0 = tangents
-    n, m = J.shape
-    n, m = m, n - m
-    M = jnp.diag(jnp.sum(J, axis = 0)) - J[:n,:]
-    dM = jnp.diag(jnp.sum(dJ, axis = 0)) - dJ[:n,:] 
-    y = jnp.matmul(jnp.linalg.inv(M), Z0)
-    dy = jnp.matmul(jnp.linalg.inv(M), dZ0) - jnp.matmul(jnp.linalg.inv(M), jnp.matmul(dM, y))
-    Z_pred = y * J
-    dZ_pred = dy * J + y * dJ
-    return (Z_pred, dZ_pred)
+#@J_to_Z.defjvp
+#def J_to_Z_jacobian(primals, tangents):
+#    J, Z0 = primals
+#    dJ, dZ0 = tangents
+#    n, m = J.shape
+#    n, m = m, n - m
+#    M = jnp.diag(jnp.sum(J, axis = 0)) - J[:n,:]
+#    dM = jnp.diag(jnp.sum(dJ, axis = 0)) - dJ[:n,:] 
+#    y = jnp.matmul(jnp.linalg.inv(M), Z0)
+#    dy = jnp.matmul(jnp.linalg.inv(M), dZ0) - jnp.matmul(jnp.linalg.inv(M), jnp.matmul(dM, y))
+#    Z_pred = y * J
+#    dZ_pred = dy * J + y * dJ
+#    return (Z_pred, dZ_pred)
